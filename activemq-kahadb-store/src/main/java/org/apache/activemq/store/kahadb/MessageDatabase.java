@@ -1656,6 +1656,14 @@ public abstract class MessageDatabase extends ServiceSupport implements BrokerSe
             // Make sure it's a valid message id...
             if (sequence != null) {
                 String subscriptionKey = command.getSubscriptionKey();
+                
+                // make sure the ack is actually expected on this subscription
+                SequenceSet range = sd.ackPositions.get(tx, subscriptionKey);
+                if (range == null || range.isEmpty() || !range.contains(sequence)) {
+                	LOG.warn("no ack position exists for message id {} on sub {}.", command.getMessageId(), subscriptionKey);
+                	return;
+                }
+                
                 if (command.getAck() != UNMATCHED) {
                     sd.orderIndex.get(tx, sequence);
                     byte priority = sd.orderIndex.lastGetPriority();
@@ -3152,7 +3160,8 @@ public abstract class MessageDatabase extends ServiceSupport implements BrokerSe
         if (messageSequence != null) {
             SequenceSet range = sd.ackPositions.get(tx, subscriptionKey);
             if (range != null && !range.isEmpty()) {
-                range.remove(messageSequence);
+            	if(!range.remove(messageSequence))
+            		return;
                 if (!range.isEmpty()) {
                     sd.ackPositions.put(tx, subscriptionKey, range);
                 } else {
